@@ -2,15 +2,15 @@ import requests
 import boto3
 from botocore.exceptions import ClientError
 import sys
-
-
-
-
+import argparse
+import os
+from datetime import datetime
+import json
 client = boto3.client('ec2')
 
 def getpublicip():
     ip = requests.get('http://ip.42.pl/raw').text
-    return(ip)
+    return(ip + '/32')
 
 def findSecurityGroups():
     try:
@@ -22,33 +22,71 @@ def findSecurityGroups():
     while i<len(secgroups['SecurityGroups']):
         print( str(i) +" - " +secgroups['SecurityGroups'][i]['Description']) 
         i+=1
-    opt = input("Please choose the security group to whitelist yourself : ") 
-    while int(opt) > i :
-        opt = input("Please choose the security group to whitelist yourself : ")
+    opt = None
+    while type(opt) != int or int(opt) > i:
+        opt = input("Please choose the security group to whitelist: ") 
+        try:
+            opt = int(opt)
+        except:
+            print('You did not enter a valid number')
     return (secgroups['SecurityGroups'][int(opt)]['GroupId'])
 
 def whitelist(ip , groupid):
     try:
-     client.authorize_security_group_ingress(
-        GroupId=groupid,
-        IpPermissions = [
-            {'IpProtocol': 'tcp',
-             'FromPort': 22,
-             'ToPort': 22,
-             'IpRanges': [{'CidrIp': ip + '/32'}]}
-            
-        ])
-     print("Your Ip is whitelisted")
+        response = client.describe_security_groups(
+                GroupIds=[
+                    groupid
+                ]
+            )
+        rule_exists = False
+        for i in response['SecurityGroups'][0]['IpPermissions']:
+            if i['IpProtocol'] == 'tcp':
+                if i['FromPort'] == 22 and i['ToPort'] == 22:
+                    for x in i['IpRanges']:
+                        if x['CidrIp'] == str(ip):
+                            rule_exists = True
+                            print('rule aleady exists')
+        
+    except Exception as e:
+        print(e)
+    try:
+        if rule_exists == False:
+            client.authorize_security_group_ingress(
+                GroupId=groupid,
+                IpPermissions = [
+                    {'IpProtocol': 'tcp',
+                    'FromPort': 22,
+                    'ToPort': 22,
+                    'IpRanges': [
+                            {
+                            'CidrIp': ip,
+                            'Description': 'Temporary remote access rule added: ' + str(datetime.today())
+                            }
+                        ]
+                    }
+                    
+                ])
+            print("Your IP address has been whitelisted")
     except ClientError as e:
         print(e)
 
 def main():
-    if len(sys.argv) > 1:
-        try:
-            boto3.setup_default_session(profile_name=sys.argv[1])
-        except :
-            print ("Oops! there is something wrong with the profile - " + sys.argv[1])
-            sys.exit()
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--aws_profile', help='Name of aws profile')
+    parser.add_argument('--aws_region', help='Name of the aws region')
+
+    args=parser.parse_args()
+
+    if 'None' in str(args):
+        print('Args missings. please run ' + __file__.split('/')[-1] + ' -h for help')
+        exit(0)
+
+    try:
+        boto3.setup_default_session(profile_name=args.aws_profile)
+        boto3.setup_default_session(region_name=args.aws_region)
+    except :
+        print ("Oops! there is something wrong with the profile")
+        sys.exit()
 
     whitelist(getpublicip(), findSecurityGroups())
 
