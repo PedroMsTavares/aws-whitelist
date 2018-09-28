@@ -12,4 +12,4 @@ python3 whitelist.py --aws_profile dev --aws_region eu-west-1
 
 ### Help :
 
-python3 whitelistpy -h
+python3 whitelist.py -h
