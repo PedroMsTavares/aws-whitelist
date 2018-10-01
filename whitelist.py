@@ -31,26 +31,45 @@ def findSecurityGroups():
             print('You did not enter a valid number')
     return (secgroups['SecurityGroups'][int(opt)]['GroupId'])
 
-def whitelist(ip , groupid):
+def ruleExists(ip, groupid):
     try:
-        response = client.describe_security_groups(
+         response = client.describe_security_groups(
+             Filters=[
+                    {
+                        'Name': 'ip-permission.cidr',
+                        'Values': [
+                            ip,
+                        ]
+                    },
+                    {
+                        'Name': 'ip-permission.from-port',
+                        'Values': [
+                            '22',
+                        ]
+                    },
+                    {
+                        'Name': 'ip-permission.protocol',
+                        'Values': [
+                            'tcp',
+                        ]
+                    },
+                ],
                 GroupIds=[
                     groupid
                 ]
             )
-        rule_exists = False
-        for i in response['SecurityGroups'][0]['IpPermissions']:
-            if i['IpProtocol'] == 'tcp':
-                if i['FromPort'] == 22 and i['ToPort'] == 22:
-                    for x in i['IpRanges']:
-                        if x['CidrIp'] == str(ip):
-                            rule_exists = True
-                            print('rule aleady exists')
-        
+         if len(response['SecurityGroups']) > 0 :
+             print('Your IP address has been whitelisted before')
+             return True
+         return False 
     except Exception as e:
         print(e)
+    
+
+def whitelist(ip , groupid):
     try:
-        if rule_exists == False:
+        _ruleexists = ruleExists(ip,groupid)
+        if _ruleexists == False:
             client.authorize_security_group_ingress(
                 GroupId=groupid,
                 IpPermissions = [
