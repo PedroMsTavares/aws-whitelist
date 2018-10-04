@@ -59,17 +59,17 @@ def ruleExists(ip, groupid):
                 ]
             )
          if len(response['SecurityGroups']) > 0 :
-             print('Your IP address has been whitelisted before')
+             print('Rule exists in whitelisted')
              return True
          return False 
     except Exception as e:
         print(e)
     
 
-def whitelist(ip , groupid):
+def whitelist(ip , groupid, remove_rule=False):
     try:
         _ruleexists = ruleExists(ip,groupid)
-        if _ruleexists == False:
+        if _ruleexists == False and remove_rule == False:
             client.authorize_security_group_ingress(
                 GroupId=groupid,
                 IpPermissions = [
@@ -84,8 +84,29 @@ def whitelist(ip , groupid):
                         ]
                     }
                     
-                ])
+                ]
+            )
             print("Your IP address has been whitelisted")
+        elif _ruleexists == False and remove_rule == True:
+            print('No rule to remove')
+        elif _ruleexists == True and remove_rule == True:
+            client.revoke_security_group_ingress(
+                GroupId=groupid,
+                IpPermissions = [
+                    {'IpProtocol': 'tcp',
+                    'FromPort': 22,
+                    'ToPort': 22,
+                    'IpRanges': [
+                            {
+                            'CidrIp': ip
+                            }
+                        ]
+                    }
+                    
+                ]
+            )
+            print("Your IP address has been removed")
+        
     except ClientError as e:
         print(e)
 
@@ -93,9 +114,10 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--aws_profile', help='Name of aws profile')
     parser.add_argument('--aws_region', help='Name of the aws region')
+    parser.add_argument('--remove', help='Switch to remove ip from security group',action="store_true")
 
     args=parser.parse_args()
-
+    
     if 'None' in str(args):
         print('Args missings. please run ' + __file__.split('/')[-1] + ' -h for help')
         exit(0)
@@ -107,7 +129,7 @@ def main():
         print ("Oops! there is something wrong with the profile")
         sys.exit()
 
-    whitelist(getpublicip(), findSecurityGroups())
+    whitelist(getpublicip(), findSecurityGroups(),args.remove)
 
 
 if __name__ == '__main__':
